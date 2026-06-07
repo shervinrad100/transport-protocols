@@ -1,0 +1,14 @@
+[tool.poetry]
+name = "transport-protocols"
+version = "0.1.0"
+description = "Learning some networking"
+authors = ["Shervin Rad <40181828+shervinrad100@users.noreply.github.com>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.12"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
