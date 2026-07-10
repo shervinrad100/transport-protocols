@@ -1,4 +1,4 @@
-# Sockets
+# 1. Sockets
 Sockets sit on the **Session** layer of the OSI model. Since a session can be established with a whole range of device combinations, it means we have various types of sockets.
 
 So let's look at everything that sits underneath it that allows this to work for the type of socket we want to build:
