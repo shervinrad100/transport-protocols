@@ -4,14 +4,18 @@ import logging
 import threading
 from queue import Queue
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger(__name__)
 
 # Parse parameters 
 parser = argparse.ArgumentParser()
 parser.add_argument('--ip', required=True)
 parser.add_argument('--port', required=True)
+parser.add_argument('--log-level', default='INFO',  choices=['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'])
 args = parser.parse_args()
+
+log_level =  getattr(logging, args.log_level.upper())
+
+logging.basicConfig(level=log_level, format='%(asctime)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
 
 # Vars
 HOST, PORT = args.ip, int(args.port)
@@ -29,11 +33,10 @@ def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
             with connections_lock:
                 active_connections.append(conn)
         except OSError as e:
+            connection_semaphore.release()
             if shutdown.is_set():
-                connection_semaphore.release()
                 break
             logger.error(f"Connection failed: {e}")
-            connection_semaphore.release()
             continue
 
         # Each connection will get its own send queue so that the server receives messages async
@@ -80,6 +83,8 @@ def receive_data_thread(conn: socket.socket) -> None:
 def send_data_thread(conn: socket.socket, send_queue: Queue[bytes]) -> None:
     while True:
         data = send_queue.get().strip()
+        if data is None:
+            break
         try:
             conn.sendall(data)
             logger.debug(f"sent {len(data)} bytes")
@@ -113,4 +118,12 @@ if __name__ == "__main__":
         except KeyboardInterrupt:
             logger.info("Shutting down...")
             shutdown.set()
+            server.close()
+            with client_queues_lock:
+                for conn, q in list(client_queues.items()):
+                    q.put(None)
+                    try:
+                        conn.close()
+                    except OSError:
+                        pass
 
