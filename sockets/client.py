@@ -3,7 +3,6 @@ import argparse
 import socket
 import threading
 
-
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
@@ -16,20 +15,21 @@ HOST, PORT = args.ip, int(args.port)
 
 # Reveive data from server in a thread
 def receive_message(soc: socket.socket):
+    peer = soc.getpeername()
     while True:
         try:
-            # receive data from client with buffer size 1024
+            # receive data from server with buffer size 1024
             data = soc.recv(1024) # blocking function call until data is received
             logger.debug(f"received {len(data)} bytes")
             if not data:
-                # This only happens when client sends b'' which is triggered by a FIN message
+                # This only happens when server sends b'' which is triggered by a FIN message
                 break
             print(f"{data.decode('utf-8')}") # TODO who is the data being received from?
         except (ConnectionResetError, ConnectionAbortedError):
-            logger.error(f"Connection to {soc.getpeername()} was lost unexpectedly.")
+            logger.error(f"Connection to {peer} was lost unexpectedly.")
             break
         except TimeoutError:
-            logger.info(f"Connection to {soc.getpeername()} timed out.")
+            logger.info(f"Connection to {peer} timed out.")
             break
     
 
@@ -39,8 +39,12 @@ def send_message(soc: socket.socket):
         data = input().strip()
         if not data:
             continue
-        soc.sendall(data.encode('utf-8'))
-        logger.debug(f"sent {len(data)} bytes")
+        try:
+            soc.sendall(data.encode('utf-8'))
+            logger.debug(f"sent {len(data)} bytes")
+        except OSError:
+            logger.error("Cannot send. Connection is closed.")
+            break
 
 if __name__ == "__main__":
     # Create client socket obj
@@ -49,14 +53,14 @@ if __name__ == "__main__":
         client.connect((HOST, PORT))
         logger.info(f"Client connected to {client.getpeername()} from {client.getsockname()}")
 
-        receive_thread = threading.Thread(target=receive_message, args=(client,))
-        send_thread = threading.Thread(target=send_message, args=(client,))
+        receive_thread = threading.Thread(target=receive_message, args=(client,), daemon=True)
+        send_thread = threading.Thread(target=send_message, args=(client,), daemon=True)
         
         receive_thread.start()
         send_thread.start()
 
         try:
             while receive_thread.is_alive():
-                receive_thread.join()
+                receive_thread.join(timeout=1)
         except KeyboardInterrupt:
             logger.info("Shutting down client")

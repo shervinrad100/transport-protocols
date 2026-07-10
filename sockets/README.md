@@ -23,3 +23,13 @@ The data is routed over the network via your network card and over the network. 
 To start, I'm going to use the `socket` package which does all of this for me. I will have two scripts talking to each other locally and build on top of it. Then I will host these on docker containers. Then I'll have the containers running on two networks. And then I will pull from a remote API.
 
 The idea is to create a messaging app. One server, clients connect to it and send their messages. The server then forwards this to the clients on that connection.
+
+
+# How to run
+```
+poetry run python3 gaming_server.py --ip 127.0.0.1 --port 5001
+```
+
+```
+poetry run python3 client.py --ip 127.0.0.1 --port 5001
+```

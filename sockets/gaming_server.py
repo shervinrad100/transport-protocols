@@ -21,34 +21,40 @@ connection_semaphore = threading.BoundedSemaphore(MAX_CONNECTIONS)
 
 
 def receive_data_thread(conn: socket.socket, receive_queue: Queue[bytes]) -> None:
-    while True:
-        try:
+    peer = conn.getpeername()
+    try:
+        while True:
             # receive data from client with buffer size 1024
             data = conn.recv(1024) # blocking function call until data is received
             logger.debug(f"received {len(data)} bytes")
             if not data:
                 # This only happens when client sends b'' which is triggered by a FIN message
                 break
-            receive_queue.put(data)
-        except (TimeoutError, OSError) as e:
-            logger.info(f"Connection to {conn.getpeername()} ended: {e}") # TODO getpeername or getsockname
-            break
-        finally:
-            cleanup_connection(conn)
+            data = f"{peer}: ".encode('utf-8') + data
+            receive_queue.put((data))
+    except (TimeoutError, OSError) as e:
+        logger.info(f"Connection to {peer} ended: {e}") # TODO getpeername or getsockname
+    finally:
+        cleanup_connection(conn)
 
 def send_data_thread(conn: socket.socket, send_queue: Queue[bytes]) -> None:
     while True:
         data = send_queue.get().strip()
-        conn.sendall(data)
-        logger.debug(f"sent {len(data)} bytes")
+        try:
+            conn.sendall(data)
+            logger.debug(f"sent {len(data)} bytes")
+        except OSError as e:
+            logger.info(f"Error sending data: {e}")
+            break
 
 def cleanup_connection(conn: socket.socket):
     """Cleanup old connections from connection pool"""
+    peer = conn.getpeername()
     with connections_lock:
         if conn in active_connections:
             active_connections.remove(conn)
             conn.close()
-            logger.info(f"Closed connection: {conn.getpeername()}")
+            logger.info(f"Closed connection: {peer}")
             connection_semaphore.release() # Free up a slot for a new incoming connection
 
 def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
@@ -65,6 +71,7 @@ def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
         except Exception as e:
             logger.error(f"Connection failed: {e}")
             connection_semaphore.release()
+            continue
 
 
         data_queue: Queue[bytes] = Queue()
@@ -82,9 +89,12 @@ if __name__ == "__main__":
         logger.info(f"Server is listening on {HOST}:{PORT}...")
 
         # Start a thread to accept connections
-        accept_connections = threading.Thread(target=accept_connection_thread, args=(server,))
+        accept_connections = threading.Thread(target=accept_connection_thread, args=(server,), daemon=True)
         accept_connections.start()
-        accept_connections.join()
+        try:
+            accept_connections.join()
+        except KeyboardInterrupt:
+            logger.info("Shutting down...")
 
         
 
