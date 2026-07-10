@@ -17,6 +17,7 @@ HOST, PORT = args.ip, int(args.port)
 active_connections = []
 connections_lock = threading.Lock() # Ensures thread-safe edits to the list
 MAX_CONNECTIONS = 10
+shutdown = threading.Event()
 connection_semaphore = threading.BoundedSemaphore(MAX_CONNECTIONS)
 
 
@@ -59,7 +60,7 @@ def cleanup_connection(conn: socket.socket):
 
 def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
     """Accept connections in a thread"""
-    while True:
+    while not shutdown.is_set():
         connection_semaphore.acquire() # Stop accepting if MAX_CONNECTIONS is hit
         try:
             conn, addr = soc.accept() # blocking function call until someone connects
@@ -68,7 +69,10 @@ def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
             logger.debug(f"set timeout on {addr}: {timeout}")
             with connections_lock:
                 active_connections.append(conn)
-        except Exception as e:
+        except OSError as e:
+            if shutdown.is_set():
+                connection_semaphore.release()
+                break
             logger.error(f"Connection failed: {e}")
             connection_semaphore.release()
             continue
@@ -91,10 +95,10 @@ if __name__ == "__main__":
         # Start a thread to accept connections
         accept_connections = threading.Thread(target=accept_connection_thread, args=(server,), daemon=True)
         accept_connections.start()
+        
         try:
             accept_connections.join()
         except KeyboardInterrupt:
             logger.info("Shutting down...")
-
-        
+            shutdown.set()
 
