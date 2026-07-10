@@ -20,7 +20,7 @@ MAX_CONNECTIONS = 10
 connection_semaphore = threading.BoundedSemaphore(MAX_CONNECTIONS)
 
 
-def receive_data_thread(conn: socket.socket, receive_queue: Queue[bytes]) -> str | None:
+def receive_data_thread(conn: socket.socket, receive_queue: Queue[bytes]) -> None:
     while True:
         try:
             # receive data from client with buffer size 1024
@@ -30,10 +30,11 @@ def receive_data_thread(conn: socket.socket, receive_queue: Queue[bytes]) -> str
                 # This only happens when client sends b'' which is triggered by a FIN message
                 break
             receive_queue.put(data)
-        except TimeoutError:
-            logger.info(f"Connection to {conn.getsockname()} timed out.") # TODO getpeername or getsockname
+        except (TimeoutError, OSError) as e:
+            logger.info(f"Connection to {conn.getpeername()} ended: {e}") # TODO getpeername or getsockname
             break
-    cleanup_connection(conn)
+        finally:
+            cleanup_connection(conn)
 
 def send_data_thread(conn: socket.socket, send_queue: Queue[bytes]) -> None:
     while True:
@@ -47,25 +48,29 @@ def cleanup_connection(conn: socket.socket):
         if conn in active_connections:
             active_connections.remove(conn)
             conn.close()
-            logger.info(f"Closed connection: {conn.getsockname()}")
+            logger.info(f"Closed connection: {conn.getpeername()}")
             connection_semaphore.release() # Free up a slot for a new incoming connection
 
 def accept_connection_thread(soc: socket.socket, timeout: int = 10*60) -> None:
     """Accept connections in a thread"""
     while True:
         connection_semaphore.acquire() # Stop accepting if MAX_CONNECTIONS is hit
-        conn, addr = soc.accept() # blocking function call until someone connects
-        logger.info(f"{addr} connected...")
-        conn.settimeout(timeout)
-        logger.debug(f"set timeout on {addr}: {timeout}")
+        try:
+            conn, addr = soc.accept() # blocking function call until someone connects
+            logger.info(f"{addr} connected...")
+            conn.settimeout(timeout)
+            logger.debug(f"set timeout on {addr}: {timeout}")
+            with connections_lock:
+                active_connections.append(conn)
+        except Exception as e:
+            logger.error(f"Connection failed: {e}")
+            connection_semaphore.release()
 
-        with connections_lock:
-            active_connections.append(conn)
 
         data_queue: Queue[bytes] = Queue()
 
-        threading.Thread(target=receive_data_thread, args=(conn, data_queue)).start()
-        threading.Thread(target=send_data_thread, args=(conn, data_queue)).start() # TODO the sender will receive it's own message
+        threading.Thread(target=receive_data_thread, args=(conn, data_queue), daemon=True).start()
+        threading.Thread(target=send_data_thread, args=(conn, data_queue), daemon=True).start() # TODO the sender will receive it's own message
 
 if __name__ == "__main__":
     # Create server socket obj
@@ -77,8 +82,9 @@ if __name__ == "__main__":
         logger.info(f"Server is listening on {HOST}:{PORT}...")
 
         # Start a thread to accept connections
-        
-        threading.Thread(target=accept_connection_thread, args=(server,)).start()
+        accept_connections = threading.Thread(target=accept_connection_thread, args=(server,))
+        accept_connections.start()
+        accept_connections.join()
 
         
 
