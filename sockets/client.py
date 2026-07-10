@@ -3,7 +3,7 @@ import argparse
 import socket
 import threading
 
-logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
 # Parse parameters 
@@ -24,12 +24,15 @@ def receive_message(soc: socket.socket):
             if not data:
                 # This only happens when server sends b'' which is triggered by a FIN message
                 break
-            print(f"{data.decode('utf-8')}") # TODO who is the data being received from?
+            print(f"{data.decode('utf-8')}")
         except (ConnectionResetError, ConnectionAbortedError):
             logger.error(f"Connection to {peer} was lost unexpectedly.")
             break
         except TimeoutError:
             logger.info(f"Connection to {peer} timed out.")
+            break
+        except OSError:      # covers reset, aborted, timeout, bad-fd-on-close
+            logger.info(f"Connection to {peer} ended.")
             break
     
 
