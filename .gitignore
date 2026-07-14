@@ -11,6 +11,7 @@ __pycache__/
 build/
 develop-eggs/
 dist/
+/bin/
 downloads/
 eggs/
 .eggs/
@@ -50,6 +51,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+*.out
 
 # Translations
 *.mo
@@ -99,7 +101,7 @@ ipython_config.py
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
 #   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
+poetry.lock
 
 # pdm
 #   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
@@ -127,6 +129,7 @@ venv/
 ENV/
 env.bak/
 venv.bak/
+.env.local
 
 # Spyder project settings
 .spyderproject
@@ -158,3 +161,25 @@ cython_debug/
 #  and can be added to the global gitignore or merged into this file.  For a more nuclear
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
+
+# AI
+.CLAUDE/
+
+## Go
+# Binaries
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test binary, built with `go test -c`
+*.test
+
+# Go workspace file
+go.work
+go.work.sum
+
+# OS
+.DS_Store
+Thumbs.db
