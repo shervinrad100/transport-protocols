@@ -296,3 +296,19 @@ HTTP/2 removes head-of-line blocking at the HTTP layer so no request blocks anot
 So HTTP/2 moved the blocking problem down a layer rather than fully eliminating it. This is precisely why HTTP/3 exists: it replaces TCP with QUIC (built on UDP) so that a lost packet only stalls its own stream, not all of them.
 
 This is pretty huge so I'm gonna park this until I do all of the above and if I still haven't learned enough we'll go for HTTP/3
+
+
+
+# How to run 
+Starting the server:
+
+```
+go run server.go
+```
+
+Once you start the client you have to manually write the request
+
+```
+go run client.go
+GET /helloworld HTTP/1.1\r\n\r\n
+```
