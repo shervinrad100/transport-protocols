@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-const HTTP_PROTO = "HTTP/1.0"
+const HTTP_PROTO = "HTTP/1.1"
 
 type httpHandler func(conn net.Conn, req *http.Request)
 
@@ -30,58 +30,70 @@ func helloWorld(conn net.Conn, req *http.Request) {
 func handleConnection(conn net.Conn) {
 	// cleanup connection
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(5 * time.Minute))
 
 	// Connect reader to connection
 	reader := bufio.NewReader(conn)
 
-	// Read the request
-	request, err := http.ReadRequest(reader)
-	if err != nil {
-		log.Println(err)
-		// writeResponse(conn, 500, "Internal Server Error", "")
-		return
-	}
-
-	// Read body
-	if request.ContentLength > 0 {
-		const maxBody = 1 << 20
-		var body []byte
-		defer request.Body.Close()
-
-		if request.ContentLength > 0 {
-			if request.ContentLength > maxBody {
-				writeResponse(conn, 413, "Content Too Large", "")
+	// Loop keeps connection alive
+	for {
+		// deadline is set for each request
+		conn.SetDeadline(time.Now().Add(5 * time.Minute))
+		// Read the request
+		request, err := http.ReadRequest(reader)
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return
 			}
-			body = make([]byte, request.ContentLength)
-			n, err := io.ReadFull(request.Body, body)
-			if err != nil {
-				log.Println(err)
-				if errors.Is(err, io.ErrUnexpectedEOF) {
-					writeResponse(conn, 400, "Bad Request", "Request body was truncated or incomplete.")
-				} else {
-					writeResponse(conn, 500, "Internal Server Error", "")
-				}
-			}
-			log.Println("read %i bytes", n)
-		} else {
-			body, err = io.ReadAll(io.LimitReader(request.Body, maxBody))
+			log.Println(err)
+			// writeResponse(conn, 500, "Internal Server Error", "")
+			return
 		}
-	}
 
-	// pass to relevant endpoint
-	handler, ok := routes[request.URL.Path]
-	if ok {
-		handler(conn, request)
-	} else {
-		writeResponse(conn, 404, "Not Found", "")
+		// Read body
+		if request.ContentLength > 0 {
+			const maxBody = 1 << 20
+			var body []byte
+			defer request.Body.Close()
+
+			if request.ContentLength > 0 {
+				if request.ContentLength > maxBody {
+					writeResponse(conn, 413, "Content Too Large", "")
+				}
+				body = make([]byte, request.ContentLength)
+				n, err := io.ReadFull(request.Body, body)
+				if err != nil {
+					log.Println(err)
+					if errors.Is(err, io.ErrUnexpectedEOF) {
+						writeResponse(conn, 400, "Bad Request", "Request body was truncated or incomplete.")
+					} else {
+						writeResponse(conn, 500, "Internal Server Error", "")
+					}
+				}
+				log.Println("read %i bytes", n)
+			} else {
+				body, err = io.ReadAll(io.LimitReader(request.Body, maxBody))
+			}
+		}
+
+		// pass to relevant endpoint
+		handler, ok := routes[request.URL.Path]
+		if ok {
+			handler(conn, request)
+		} else {
+			writeResponse(conn, 404, "Not Found", "")
+		}
+
+		// client requests to close connection
+		if request.Close {
+			return
+		}
 	}
 
 }
 
 func writeResponse(conn net.Conn, statusCode int, status, body string) error {
 	// HTTP/1.1 <code> <reason>\r\n<body>\r\n\r\n
-	response := fmt.Sprintf("%s %d %s\r\nContent-Length: %d\r\n%s\r\n\r\n", HTTP_PROTO, statusCode, status, len(body), body)
+	response := fmt.Sprintf("%s %d %s\r\nContent-Length: %d\r\n\r\n%s\r\n\r\n", HTTP_PROTO, statusCode, status, len(body), body)
 	_, err := conn.Write([]byte(response))
 	fmt.Println("Responding to", conn.RemoteAddr(), response)
 	return err

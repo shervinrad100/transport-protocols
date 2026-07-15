@@ -7,12 +7,13 @@ import (
 	"io"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"strings"
 	"time"
 )
 
-func sendRequest(conn net.Conn) error {
+func runClient(conn net.Conn) error {
 	var escaper = strings.NewReplacer(
 		`\r`, "\r",
 		`\n`, "\n",
@@ -21,25 +22,38 @@ func sendRequest(conn net.Conn) error {
 	)
 
 	// continuously read from stdin and write everything into the connection
-	reader := bufio.NewReader(os.Stdin)
-	line, err := reader.ReadString('\n')
-	if err != nil {
-		log.Fatal(err)
-	}
-	line = strings.TrimRight(line, "\r\n")
-	unescaped := escaper.Replace(line)
-	if _, err := conn.Write([]byte(unescaped)); err != nil {
-		log.Fatal(err)
-		return err
+	stdin := bufio.NewReader(os.Stdin)
+	responseReader := bufio.NewReader(conn)
+
+	for {
+		fmt.Print("> ")
+		line, err := stdin.ReadString('\n')
+		if err != nil {
+			if err == io.EOF {
+				return nil
+			}
+			return err
+		}
+		line = strings.TrimRight(line, "\r\n")
+		if line == "" {
+			continue
+		}
+
+		// send one request
+		if _, err := conn.Write([]byte(escaper.Replace(line))); err != nil {
+			return err
+		}
+
+		// Read one response
+		resp, err := http.ReadResponse(responseReader, nil)
+		if err != nil {
+			return err
+		}
+		body, _ := io.ReadAll(resp.Body)
+		fmt.Println(resp.Status, "\n"+string(body))
+		resp.Body.Close()
 	}
 
-	resp, err := io.ReadAll(conn)
-	if err != nil {
-		log.Fatal(err)
-	}
-	fmt.Println(string(resp))
-
-	return nil
 }
 
 func main() {
@@ -56,5 +70,5 @@ func main() {
 	}
 	defer conn.Close()
 
-	sendRequest(conn)
+	runClient(conn)
 }
