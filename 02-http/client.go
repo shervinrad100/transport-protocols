@@ -70,5 +70,8 @@ func main() {
 	}
 	defer conn.Close()
 
-	runClient(conn)
+	err = runClient(conn)
+	if err != nil {
+		fmt.Println(err)
+	}
 }

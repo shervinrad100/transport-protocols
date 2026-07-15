@@ -312,3 +312,15 @@ Once you start the client you have to manually write the request
 go run client.go
 GET /helloworld HTTP/1.1\r\n\r\n
 ```
+
+What I've done so far:
+- establish a TCP soc and listen (both server and client)
+- client to take user input and replace escaped chars to send bytes to server
+- server receives bytes and parses the HTTP request
+      - then it routes it to the respective handler with the request
+      - the endpoint handles the request and writes a response
+      - in between we also write error responses if something goes wrong
+- client gets response back and writes it to console
+
+
+I learned a lot about reader/writer interfaces but I'm not really interested in parsing bytes so I'll leave this here. I'll use the info in my other project to set up a server and build my API
